@@ -1,1 +1,1 @@
-Making a invisible day visible
+Making an invisible day visible
