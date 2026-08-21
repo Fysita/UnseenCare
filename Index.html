@@ -1,0 +1,509 @@
+<!DOCTYPE html> 
+<html lang="nl"> 
+<head> 
+  <meta charset="UTF-8"> 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>UnseenCare</title> 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 
+  <!-- QR Code Bibliotheek --> 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script> 
+
+  <style> 
+    :root { 
+      --bg-color: #f8fafc; 
+      --card-bg: #ffffff; 
+      --primary-teal: #0d9488; 
+      --primary-soft: #f0fdfa; 
+      --text-main: #0f172a; 
+      --text-sub: #64748b; 
+      --border-color: #e2e8f0; 
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); 
+    } 
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; } 
+    body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; padding: 16px; min-height: 100vh; } 
+    .app-container { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding-bottom: 80px; } 
+
+    /* AUTH OVERLAY */ 
+    .auth-overlay { position: fixed; inset: 0; background: var(--bg-color); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 24px; } 
+    .auth-overlay.hidden { display: none; } 
+    .auth-card { background: white; padding: 28px; border-radius: 24px; width: 100%; max-width: 360px; box-shadow: var(--shadow); border: 1px solid var(--border-color); } 
+    .auth-card h2 { color: var(--primary-teal); margin-bottom: 16px; text-align: center; font-size: 1.4rem; } 
+    .auth-card input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 12px; font-size: 0.95rem; } 
+    .auth-card button { width: 100%; padding: 12px; border: none; border-radius: 12px; background: var(--primary-teal); color: white; font-weight: bold; cursor: pointer; font-size: 0.95rem; } 
+    .auth-toggle { text-align: center; font-size: 0.85rem; color: var(--text-sub); cursor: pointer; margin-top: 12px; } 
+
+    /* HEADER */ 
+    header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; } 
+    .brand { font-size: 1.3rem; font-weight: 800; color: var(--primary-teal); } 
+    .user-badge { font-size: 0.75rem; background: #e2e8f0; padding: 4px 8px; border-radius: 20px; color: var(--text-sub); } 
+    .btn-logout { background: none; border: none; color: #ef4444; font-size: 0.8rem; font-weight: 600; cursor: pointer; margin-left: 8px; } 
+
+    /* CARDS */ 
+    .card { background-color: var(--card-bg); padding: 20px; border-radius: 20px; box-shadow: var(--shadow); border: 1px solid var(--border-color); } 
+    .tab-content { display: none; } 
+    .tab-content.active { display: block; } 
+
+    /* DASHBOARD GRID */ 
+    .dashboard-header { text-align: center; margin-bottom: 20px; } 
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; } 
+    .metric-card { background: var(--primary-soft); padding: 16px; border-radius: 16px; text-align: center; border: 1px solid #ccfbf1; } 
+    .metric-icon { font-size: 2rem; margin-bottom: 4px; } 
+    .metric-title { font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-sub); } 
+    .metric-value { font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 2px; } 
+     
+    /* BATTERIJ INDICATOR */ 
+    .battery-wrapper { width: 60px; height: 26px; border: 2px solid var(--primary-teal); border-radius: 6px; padding: 2px; margin: 6px auto; position: relative; } 
+    .battery-wrapper::after { content: ''; position: absolute; right: -6px; top: 6px; width: 4px; height: 10px; background: var(--primary-teal); border-radius: 0 2px 2px 0; } 
+    .battery-fill { height: 100%; background: var(--primary-teal); border-radius: 3px; transition: width 0.3s ease; } 
+
+    .full-card { background: white; border: 1px solid var(--border-color); padding: 16px; border-radius: 16px; margin-bottom: 12px; } 
+    .status-pill { display: inline-block; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; margin-top: 6px; } 
+    .pill-green { background: #dcfce7; color: #15803d; } 
+    .pill-orange { background: #fef3c7; color: #b45309; } 
+    .pill-red { background: #fee2e2; color: #b91c1c; } 
+    .notes-box { font-size: 0.9rem; color: #334155; line-height: 1.5; font-style: italic; background: #f8fafc; padding: 12px; border-radius: 10px; margin-top: 6px; border-left: 3px solid var(--primary-teal); } 
+
+    /* PAIN EMOJI DISPLAY */
+    .pain-display { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .pain-emoji { font-size: 1.8rem; }
+    .pain-value-text { font-size: 1.1rem; font-weight: 800; color: var(--primary-teal); }
+
+    /* ISI FORM STYLING */
+    .isi-section { background: #f8fafc; padding: 14px; border-radius: 14px; border: 1px solid var(--border-color); margin-bottom: 16px; }
+    .isi-title { font-size: 0.9rem; font-weight: 700; color: var(--primary-teal); margin-bottom: 12px; }
+    .isi-q { margin-bottom: 12px; }
+    .isi-q label { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: var(--text-main); }
+    .isi-val-display { font-size: 0.75rem; color: var(--text-sub); text-align: right; font-weight: 600; }
+
+    /* QR CODE STYLING */ 
+    .qr-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; background: #fff; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 12px; } 
+    #qrcode img { margin: 12px auto; } 
+    .code-display { font-size: 1.6rem; font-weight: 800; letter-spacing: 4px; color: var(--primary-teal); background: var(--primary-soft); padding: 8px 16px; border-radius: 12px; margin-top: 8px; } 
+
+    /* FORMS & BUTTONS */ 
+    .form-group { margin-bottom: 16px; } 
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; } 
+    input[type=range], select, textarea, input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 0.95rem; } 
+    .btn-save { width: 100%; padding: 14px; border-radius: 12px; border: none; background-color: var(--primary-teal); color: #fff; font-weight: 700; cursor: pointer; font-size: 1rem; } 
+
+    /* NAV */ 
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background-color: var(--card-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 12px 0; z-index: 100; } 
+    .nav-item { background: none; border: none; color: var(--text-sub); font-size: 0.8rem; font-weight: 600; cursor: pointer; } 
+    .nav-item.active { color: var(--primary-teal); } 
+  </style> 
+</head> 
+<body> 
+
+  <!-- INLOG / REGISTRATIE --> 
+  <div class="auth-overlay" id="authOverlay"> 
+    <div class="auth-card"> 
+      <h2 id="authTitle">UnseenCare Inloggen</h2> 
+      <input type="email" id="authEmail" placeholder="E-mailadres"> 
+      <input type="password" id="authPassword" placeholder="Wachtwoord"> 
+      <button onclick="handleAuth()" id="authBtn">Inloggen</button> 
+      <div class="auth-toggle" onclick="toggleAuthMode()" id="authToggleText">Nog geen account? Registreer hier.</div> 
+    </div> 
+  </div> 
+
+  <div class="app-container"> 
+    <header> 
+      <div class="brand">UnseenCare</div> 
+      <div> 
+        <span class="user-badge" id="userEmailDisplay"></span> 
+        <button class="btn-logout" onclick="logout()">Uitloggen</button> 
+      </div> 
+    </header> 
+
+    <!-- TAB 1: VASTLEGGEN / INVOEREN --> 
+    <div id="tab-vastleggen" class="tab-content"> 
+      <div class="card"> 
+        <h3 style="margin-bottom: 16px; color: var(--primary-teal);">Mijn Status Bijwerken</h3> 
+         
+        <div class="form-group"> 
+          <label>Dagdeel</label> 
+          <select id="timeSlot"> 
+            <option value="Ochtend">Ochtendmeting</option> 
+            <option value="Middag">Middagmeting</option> 
+            <option value="Avond">Avondmeting</option> 
+          </select> 
+        </div> 
+
+        <!-- PIJNSCORE MET EMOJIS -->
+        <div class="form-group"> 
+          <label>Pijnscore (NPRS 0 - 10)</label> 
+          <input type="range" id="nprs" min="0" max="10" value="3" oninput="updatePainEmoji(this.value)"> 
+          <div class="pain-display">
+            <span class="pain-emoji" id="painEmoji">🙂</span>
+            <span class="pain-value-text" id="painValueText">3 / 10</span>
+          </div>
+        </div> 
+
+        <div class="form-group"> 
+          <label>Energieniveau (Batterij 1 - 5)</label> 
+          <input type="range" id="energy" min="1" max="5" value="3"> 
+        </div> 
+
+        <!-- SLAAP KLINIMETRIE: 7 ISI VRAGEN --> 
+        <div class="isi-section">
+          <div class="isi-title">🌙 Slaapkwaliteit Vragenlijst (ISI)</div>
+          <p style="font-size:0.75rem; color:var(--text-sub); margin-bottom:12px;">Beantwoord de vragen over je slaap van de afgelopen 2 weken:</p>
+
+          <div class="isi-q">
+            <label>1. Moeite met inslapen?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()">
+            <div class="isi-val-display">Geen (0) — Heel erg (4)</div>
+          </div>
+
+          <div class="isi-q">
+            <label>2. Moeite met doorslapen?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()">
+            <div class="isi-val-display">Geen (0) — Heel erg (4)</div>
+          </div>
+
+          <div class="isi-q">
+            <label>3. Te vroeg wakker worden?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()">
+            <div class="isi-val-display">Geen (0) — Heel erg (4)</div>
+          </div>
+
+          <div class="isi-q">
+            <label>4. Hoe tevreden ben je over je slaap pattern?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()">
+            <div class="isi-val-display">Tevreden (0) — Ontevreden (4)</div>
+          </div>
+
+          <div class="isi-q">
+            <label>5. Hoe merkbaar zijn je slaapproblemen voor anderen?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="0" oninput="calculateISI()">
+            <div class="isi-val-display">Niet (0) — Heel erg (4)</div>
+          </div>
+
+          <div class="isi-q">
+            <label>6. Maak je je zorgen over je slaapproblemen?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()">
+            <div class="isi-val-display">Helemaal niet (0) — Heel erg (4)</div>
+          </div>
+
+          <div class="isi-q">
+            <label>7. Belemmeren slaapproblemen je dagelijks functioneren?</label>
+            <input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()">
+            <div class="isi-val-display">Helemaal niet (0) — Heel erg (4)</div>
+          </div>
+
+          <div style="margin-top:10px; font-weight:700; font-size:0.85rem; color:var(--primary-teal);" id="isiResultPreview">
+            Berekende Score: 6/28 (Geen klinische insomnie)
+          </div>
+        </div>
+
+        <div class="form-group"> 
+          <label>Belastbaarheid (PSK Status)</label> 
+          <select id="pskStatus"> 
+            <option value="Rustdag">Rustdag (Laag)</option> 
+            <option value="Aangepaste planning" selected>Aangepaste planning (Medium)</option> 
+            <option value="Volledig belastbaar">Volledig belastbaar (Hoog)</option> 
+          </select> 
+        </div> 
+
+        <div class="form-group"> 
+          <label>Opmerking / Toelichting</label> 
+          <textarea id="notes" rows="2" placeholder="Hoe voel je je kort samengevat?"></textarea> 
+        </div> 
+
+        <button class="btn-save" onclick="saveStatus()">Status Nu Delen</button> 
+      </div> 
+    </div> 
+
+    <!-- TAB 2: OVERZICHT / DASHBOARD --> 
+    <div id="tab-overzicht" class="tab-content active"> 
+      <div class="dashboard-header"> 
+        <h2>Status Overzicht</h2> 
+        <div style="font-size: 0.8rem; color: var(--text-sub);" id="lastUpdateDisplay">Laatst bijgewerkt: --</div> 
+      </div> 
+      <div id="dashboardContent"> 
+        <p style="text-align: center; color: var(--text-sub);">Status ophalen...</p> 
+      </div> 
+    </div> 
+
+    <!-- TAB 3: DELEN / KOPPELEN --> 
+    <div id="tab-delen" class="tab-content"> 
+      <div class="card"> 
+        <h3 style="color: var(--primary-teal); margin-bottom: 8px;">Kijker Fysiek Koppelen</h3> 
+        <p style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 16px;"> 
+          Laat de QR-code op dit scherm scannen door je partner of mantelzorger om veilig toegang te geven. 
+        </p> 
+
+        <div id="shareStatusContainer"></div> 
+      </div> 
+    </div> 
+  </div> 
+
+  <nav class="bottom-nav"> 
+    <button class="nav-item" id="nav-vastleggen" onclick="switchTab('vastleggen')">Vastleggen</button> 
+    <button class="nav-item active" id="nav-overzicht" onclick="switchTab('overzicht')">Overzicht</button> 
+    <button class="nav-item" id="nav-delen" onclick="switchTab('delen')">Delen</button> 
+  </nav> 
+
+  <script> 
+    const SUPABASE_URL = "https://xvmmbvsfngvmsqbagqwm.supabase.co"; 
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bW1idnNmbmd2bXNxYmFncXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyODU0MzEsImV4cCI6MjEwMjg2MTQzMX0.Dw2xmdiugEnLfMlmMPIeJGv2nSGKamzbAsIDHkJEUUo"; 
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); 
+
+    let isSignUp = false; 
+    let currentUser = null; 
+    let currentIsiResultText = "Geen klinische insomnie (ISI 6/28)";
+
+    // EMOJI SCHAAL VOOR PIJN
+    const painEmojis = ["😀", "🙂", "😐", "🙁", "😣", "😖", "😫", "😭", "😱", "🤯", "☠️"];
+
+    function updatePainEmoji(val) {
+      document.getElementById('painEmoji').innerText = painEmojis[val] || "😐";
+      document.getElementById('painValueText').innerText = `${val} / 10`;
+    }
+
+    // ISI BEREKENINGS LOGICA
+    function calculateISI() {
+      const inputs = document.querySelectorAll('.isi-input');
+      let total = 0;
+      inputs.forEach(input => {
+        total += parseInt(input.value) || 0;
+      });
+
+      let category = "";
+      if (total <= 7) category = "🟢 Geen klinische insomnie";
+      else if (total <= 14) category = "🟡 Subklinische / Lichte insomnie";
+      else if (total <= 21) category = "🟠 Matige klinische insomnie";
+      else category = "🔴 Ernstige klinische insomnie";
+
+      currentIsiResultText = `${category} (ISI ${total}/28)`;
+      document.getElementById('isiResultPreview').innerText = `Berekende Score: ${total}/28 — ${category.replace(/^[🟢🟡🟠🔴]\s*/, '')}`;
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => { 
+      calculateISI(); // initialiseer ISI
+      const { data: { session } } = await db.auth.getSession(); 
+      if (session) { 
+        currentUser = session.user; 
+        document.getElementById('authOverlay').classList.add('hidden'); 
+        document.getElementById('userEmailDisplay').innerText = currentUser.email; 
+        loadDashboard(); 
+        loadSharingInfo(); 
+      } 
+    }); 
+
+    function toggleAuthMode() { 
+      isSignUp = !isSignUp; 
+      document.getElementById('authTitle').innerText = isSignUp ? "Account Maken" : "Inloggen UnseenCare"; 
+      document.getElementById('authBtn').innerText = isSignUp ? "Registreren" : "Inloggen"; 
+      document.getElementById('authToggleText').innerText = isSignUp ? "Heb je al een account? Log in." : "Nog geen account? Registreer hier."; 
+    } 
+
+    async function handleAuth() { 
+      const email = document.getElementById('authEmail').value; 
+      const password = document.getElementById('authPassword').value; 
+      if (!email || !password) return alert("Vul e-mail en wachtwoord in."); 
+
+      let res = isSignUp  
+        ? await db.auth.signUp({ email, password }) 
+        : await db.auth.signInWithPassword({ email, password }); 
+
+      if (res.error) { 
+        alert("Fout: " + res.error.message); 
+      } else { 
+        currentUser = res.data.user; 
+        document.getElementById('authOverlay').classList.add('hidden'); 
+        document.getElementById('userEmailDisplay').innerText = currentUser.email; 
+        loadDashboard(); 
+        loadSharingInfo(); 
+      } 
+    } 
+
+    async function logout() { 
+      await db.auth.signOut(); 
+      location.reload(); 
+    } 
+
+    async function loadDashboard() { 
+      let targetUserId = currentUser.id;
+      const { data: conn } = await db.from('connections')
+        .select('patient_id')
+        .eq('viewer_email', currentUser.email)
+        .limit(1);
+
+      if (conn && conn.length > 0 && conn[0].patient_id) {
+        targetUserId = conn[0].patient_id;
+      }
+
+      const { data } = await db.from('statuses') 
+        .select('*') 
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false }) 
+        .limit(1); 
+
+      const container = document.getElementById('dashboardContent'); 
+
+      if (!data || data.length === 0) { 
+        container.innerHTML = `<div class="card" style="text-align:center;"><p style="color:var(--text-sub);">Nog geen statusmetingen beschikbaar.</p></div>`; 
+        return; 
+      } 
+
+      const latest = data[0]; 
+      const energyLevel = latest.energy || 1; 
+      const batteryPercent = energyLevel * 20; 
+      const nprsValue = latest.nprs !== undefined ? latest.nprs : 0;
+
+      let pillClass = "pill-orange"; 
+      if (latest.psk_status === "Volledig belastbaar") pillClass = "pill-green"; 
+      if (latest.psk_status === "Rustdag") pillClass = "pill-red"; 
+
+      const dateFormatted = new Date(latest.created_at).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }); 
+      document.getElementById('lastUpdateDisplay').innerText = `Laatst bijgewerkt: ${dateFormatted}`; 
+
+      container.innerHTML = ` 
+        <div class="status-grid"> 
+          <div class="metric-card"> 
+            <div class="metric-icon">${painEmojis[nprsValue] || '🩹'}</div> 
+            <div class="metric-title">Pijnscore (NPRS)</div> 
+            <div class="metric-value">${nprsValue} / 10</div> 
+          </div> 
+
+          <div class="metric-card"> 
+            <div class="battery-wrapper"> 
+              <div class="battery-fill" style="width: ${batteryPercent}%;"></div> 
+            </div> 
+            <div class="metric-title">Energie</div> 
+            <div class="metric-value">${energyLevel} / 5</div> 
+          </div> 
+        </div> 
+
+        ${latest.sleep_quality ? ` 
+          <div class="full-card"> 
+            <div class="metric-title">Slaapkwaliteit (ISI)</div> 
+            <div style="font-weight: 700; margin-top: 4px; font-size:1.05rem; color:var(--primary-teal);">${latest.sleep_quality}</div> 
+          </div> 
+        ` : ''} 
+
+        <div class="full-card"> 
+          <div class="metric-title">Belastbaarheid (PSK)</div> 
+          <div class="status-pill ${pillClass}">${latest.psk_status || 'Onbekend'}</div> 
+        </div> 
+
+        ${latest.notes ? ` 
+          <div class="full-card"> 
+            <div class="metric-title">Toelichting Cliënt</div> 
+            <div class="notes-box">"${latest.notes}"</div> 
+          </div> 
+        ` : ''} 
+      `; 
+    } 
+
+    async function saveStatus() { 
+      const payload = { 
+        user_id: currentUser.id, 
+        nprs: parseInt(document.getElementById('nprs').value), 
+        energy: parseInt(document.getElementById('energy').value), 
+        sleep_quality: currentIsiResultText, 
+        psk_status: document.getElementById('pskStatus').value, 
+        notes: `[${document.getElementById('timeSlot').value}] ${document.getElementById('notes').value}` 
+      }; 
+
+      const { error } = await db.from('statuses').insert([payload]); 
+      if (error) alert("Opslaan mislukt: " + error.message); 
+      else { 
+        alert("Status opgeslagen!"); 
+        switchTab('overzicht'); 
+        loadDashboard(); 
+      } 
+    } 
+
+    async function loadSharingInfo() { 
+      const { data } = await db.from('connections').select('*').eq('patient_id', currentUser.id); 
+      const container = document.getElementById('shareStatusContainer'); 
+
+      if (data && data.length > 0 && data[0].viewer_email && data[0].viewer_email !== 'pending') { 
+        container.innerHTML = ` 
+          <div style="background: var(--primary-soft); padding: 16px; border-radius: 12px; border: 1px solid #ccfbf1; text-align: center;"> 
+            <div style="font-size:0.85rem; color:var(--text-sub);">Actief Gekoppeld Met:</div> 
+            <strong style="color:var(--primary-teal); font-size:1.1rem;">${data[0].viewer_email}</strong> 
+            <button onclick="removeViewer('${data[0].id}')" style="display:block; width:100%; margin-top:14px; background:#ef4444; color:white; border:none; padding:10px; border-radius:8px; cursor:pointer; font-weight:bold;">Koppeling Verbreken</button> 
+          </div> 
+        `; 
+        return; 
+      } 
+
+      container.innerHTML = ` 
+        <button class="btn-save" onclick="generateQRCode()">Toon Mijn QR-Koppelcode</button> 
+        <div id="qrOutput" class="qr-container" style="display:none;"> 
+          <p style="font-size: 0.85rem; color: var(--text-sub); text-align: center;">Laat deze QR-code scannen door de kijker:</p> 
+          <div id="qrcode"></div> 
+          <p style="font-size: 0.8rem; color: var(--text-sub); margin-top: 8px;">Of voer deze 6-cijferige code in:</p> 
+          <div class="code-display" id="codeText">------</div> 
+        </div> 
+
+        <div style="margin-top:24px; border-top: 1px solid var(--border-color); padding-top: 16px;"> 
+          <h4 style="font-size:0.9rem; color:var(--text-sub); margin-bottom:8px;">Ben jij een kijker? Voer de code in:</h4> 
+          <input type="text" id="joinCodeInput" placeholder="Bijv. 482910" style="text-align:center; font-weight:bold; letter-spacing:2px;"> 
+          <button class="btn-save" onclick="connectWithCode()" style="margin-top:8px; background:var(--text-main);">Koppelen met Cliënt</button> 
+        </div> 
+      `; 
+    } 
+
+    async function generateQRCode() { 
+      const randomCode = Math.floor(100000 + Math.random() * 900000).toString(); 
+       
+      const { error } = await db.from('connections').upsert([{  
+        patient_id: currentUser.id,  
+        viewer_email: 'pending',  
+        invite_code: randomCode  
+      }]); 
+
+      if (error) return alert("Fout bij genereren: " + error.message); 
+
+      document.getElementById('qrOutput').style.display = 'flex'; 
+
+      document.getElementById('codeText').innerText = randomCode; 
+
+      document.getElementById('qrcode').innerHTML = ""; 
+      new QRCode(document.getElementById("qrcode"), { 
+        text: `unseencare://connect?code=${randomCode}`, 
+        width: 160, 
+        height: 160, 
+        colorDark : "#0d9488", 
+        colorLight : "#ffffff" 
+      }); 
+    } 
+
+    async function connectWithCode() { 
+      const code = document.getElementById('joinCodeInput').value.trim(); 
+      if (!code) return alert("Vul een 6-cijferige code in."); 
+
+      const { data, error } = await db.from('connections').select('*').eq('invite_code', code); 
+
+      if (error || !data || data.length === 0) { 
+        return alert("Ongeldige of verlopen koppelcode. Probeer het opnieuw."); 
+      } 
+
+      const connection = data[0]; 
+      const { updateErr } = await db.from('connections') 
+        .update({ viewer_email: currentUser.email, invite_code: null }) 
+        .eq('id', connection.id); 
+
+      alert("Gefeliciteerd! Je bent nu succesvol gekoppeld als kijker."); 
+      loadSharingInfo(); 
+      loadDashboard(); 
+    } 
+
+    async function removeViewer(id) { 
+      const { error } = await db.from('connections').delete().eq('id', id); 
+      if (!error) loadSharingInfo(); 
+    } 
+
+    function switchTab(tab) { 
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active')); 
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active')); 
+      document.getElementById(`tab-${tab}`).classList.add('active'); 
+      document.getElementById(`nav-${tab}`).classList.add('active'); 
+    } 
+  </script> 
+</body> 
+</html>
