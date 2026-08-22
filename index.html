@@ -1,0 +1,567 @@
+<!DOCTYPE html> 
+<html lang="nl"> 
+<head> 
+  <meta charset="UTF-8"> 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>UnseenCare</title> 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 
+
+  <style> 
+    :root { 
+      --bg-color: #f8fafc; 
+      --card-bg: #ffffff; 
+      --primary-teal: #0d9488; 
+      --primary-soft: #f0fdfa; 
+      --text-main: #0f172a; 
+      --text-sub: #64748b; 
+      --border-color: #e2e8f0; 
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); 
+    } 
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; } 
+    body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; padding: 16px; min-height: 100vh; } 
+    .app-container { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding-bottom: 80px; } 
+
+    /* AUTH OVERLAY */ 
+    .auth-overlay { position: fixed; inset: 0; background: var(--bg-color); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 24px; overflow-y: auto; } 
+    .auth-overlay.hidden { display: none; } 
+    .auth-card { background: white; padding: 28px; border-radius: 24px; width: 100%; max-width: 360px; box-shadow: var(--shadow); border: 1px solid var(--border-color); text-align: center; } 
+    .auth-card.hidden { display: none; }
+    
+    .auth-brand-title { font-size: 2rem; font-weight: 800; color: var(--primary-teal); margin-bottom: 24px; letter-spacing: -0.5px; }
+
+    .auth-card input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 12px; font-size: 0.95rem; } 
+    .auth-card button { width: 100%; padding: 12px; border: none; border-radius: 12px; background: var(--primary-teal); color: white; font-weight: bold; cursor: pointer; font-size: 0.95rem; } 
+    .auth-toggle { text-align: center; font-size: 0.85rem; color: var(--text-sub); cursor: pointer; margin-top: 12px; } 
+    .auth-forgot { text-align: center; font-size: 0.8rem; color: var(--primary-teal); cursor: pointer; margin-top: 8px; display: block; font-weight: 600; }
+
+    /* HEADER */ 
+    header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; } 
+    .brand { font-size: 1.3rem; font-weight: 800; color: var(--primary-teal); } 
+    .user-badge { font-size: 0.75rem; background: #e2e8f0; padding: 4px 8px; border-radius: 20px; color: var(--text-sub); } 
+    .btn-logout { background: none; border: none; color: #ef4444; font-size: 0.8rem; font-weight: 600; cursor: pointer; margin-left: 8px; } 
+
+    /* CARDS & OVERZICHT */ 
+    .card { background-color: var(--card-bg); padding: 20px; border-radius: 20px; box-shadow: var(--shadow); border: 1px solid var(--border-color); } 
+    .tab-content { display: none; } 
+    .tab-content.active { display: block; } 
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; } 
+    .metric-card { background: var(--primary-soft); padding: 16px; border-radius: 16px; text-align: center; border: 1px solid #ccfbf1; } 
+    .metric-title { font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-sub); } 
+    .metric-value { font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 2px; } 
+     
+    .battery-wrapper { width: 60px; height: 26px; border: 2px solid var(--primary-teal); border-radius: 6px; padding: 2px; margin: 6px auto; position: relative; } 
+    .battery-wrapper::after { content: ''; position: absolute; right: -6px; top: 6px; width: 4px; height: 10px; background: var(--primary-teal); border-radius: 0 2px 2px 0; } 
+    .battery-fill { height: 100%; background: var(--primary-teal); border-radius: 3px; } 
+
+    /* GEOMKADERDE INPUT STYLING */
+    .input-box-container { display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); }
+    
+    .battery-preview-box { display: flex; align-items: center; justify-content: space-between; }
+    .battery-visual-large { width: 90px; height: 36px; border: 2px solid var(--primary-teal); border-radius: 8px; padding: 3px; position: relative; background: white; }
+    .battery-visual-large::after { content: ''; position: absolute; right: -7px; top: 10px; width: 5px; height: 12px; background: var(--primary-teal); border-radius: 0 3px 3px 0; }
+    .battery-fill-large { height: 100%; background: var(--primary-teal); border-radius: 4px; transition: width 0.1s ease, background-color 0.2s ease; }
+    .battery-percentage-text { font-size: 1.2rem; font-weight: 800; color: var(--primary-teal); }
+
+    .pain-preview-box { display: flex; align-items: center; justify-content: space-between; }
+    .pain-emoji { font-size: 2rem; }
+    .pain-value-text { font-size: 1.2rem; font-weight: 800; color: var(--primary-teal); }
+
+    /* THERMOMETER STYLING (HORIZONTAAL) */
+    .thermo-preview-box { display: flex; align-items: center; justify-content: space-between; }
+    .thermo-visual { display: flex; align-items: center; gap: 0; width: 140px; }
+    .thermo-bulb { width: 22px; height: 22px; border-radius: 50%; background: #10b981; margin-right: -4px; z-index: 2; transition: background-color 0.2s ease; }
+    .thermo-tube { flex: 1; height: 14px; background: white; border: 2px solid var(--border-color); border-radius: 0 8px 8px 0; padding: 2px; position: relative; overflow: hidden; }
+    .thermo-fill { height: 100%; width: 20%; background: #10b981; border-radius: 0 4px 4px 0; transition: width 0.1s ease, background-color 0.2s ease; }
+    .thermo-value-text { font-size: 1.2rem; font-weight: 800; color: var(--primary-teal); }
+
+    /* PSK SPECIFIEK */
+    .psk-row { background: white; padding: 10px; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .psk-header-row { display: flex; justify-content: space-between; align-items: center; }
+    .psk-score-display { font-size: 0.95rem; font-weight: 800; color: var(--primary-teal); }
+
+    .full-card { background: white; border: 1px solid var(--border-color); padding: 16px; border-radius: 16px; margin-bottom: 12px; } 
+    .status-pill { display: inline-block; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; margin-top: 6px; } 
+    .pill-green { background: #dcfce7; color: #15803d; } 
+    .pill-orange { background: #fef3c7; color: #b45309; } 
+    .pill-red { background: #fee2e2; color: #b91c1c; } 
+    .notes-box { font-size: 0.9rem; color: #334155; line-height: 1.5; font-style: italic; background: #f8fafc; padding: 12px; border-radius: 10px; margin-top: 6px; border-left: 3px solid var(--primary-teal); } 
+
+    .isi-section { background: #f8fafc; padding: 14px; border-radius: 14px; border: 1px solid var(--border-color); margin-bottom: 16px; display: none; }
+    .isi-section.visible { display: block; }
+    .isi-title { font-size: 0.9rem; font-weight: 700; color: var(--primary-teal); margin-bottom: 12px; }
+    .isi-q { margin-bottom: 12px; }
+    .isi-q label { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; display: block; }
+    .isi-val-display { font-size: 0.75rem; color: var(--text-sub); text-align: right; }
+
+    .form-group { margin-bottom: 16px; } 
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; text-align: left; } 
+    input[type=range], select, textarea, input[type=text], input[type=email], input[type=password] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 0.95rem; } 
+    .btn-save { width: 100%; padding: 14px; border-radius: 12px; border: none; background-color: var(--primary-teal); color: #fff; font-weight: 700; cursor: pointer; font-size: 1rem; } 
+
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background-color: var(--card-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 12px 0; z-index: 100; } 
+    .nav-item { background: none; border: none; color: var(--text-sub); font-size: 0.8rem; font-weight: 600; cursor: pointer; } 
+    .nav-item.active { color: var(--primary-teal); } 
+  </style> 
+</head> 
+<body> 
+
+  <!-- INLOG & KEUZE OVERLAY --> 
+  <div class="auth-overlay" id="authOverlay"> 
+    <div class="auth-card" id="initialAuthCard"> 
+      <div class="auth-brand-title">UnseenCare</div> 
+      <input type="email" id="authEmail" placeholder="E-mailadres"> 
+      <input type="password" id="authPassword" placeholder="Wachtwoord"> 
+      <button onclick="handleAuth()" id="authBtn">Inloggen</button> 
+      <span class="auth-forgot" onclick="resetPassword()" id="authForgotText">Wachtwoord vergeten?</span>
+      <div class="auth-toggle" onclick="toggleAuthMode()" id="authToggleText">Geen account? Registreer</div> 
+    </div> 
+
+    <div class="auth-card hidden" id="roleSelectionCard">
+      <div class="auth-brand-title">Welkom!</div>
+      <p style="margin-bottom: 20px; color: var(--text-sub); font-size: 0.9rem;">Hoe wil je dit account gebruiken?</p>
+      <button onclick="setRole('patient')" style="background: var(--primary-teal); margin-bottom: 12px;">Ik ben cliënt (gegevens bijhouden)</button>
+      <button onclick="setRole('viewer')" style="background: var(--text-main);">Ik ben kijker (inzicht bekijken)</button>
+    </div>
+  </div> 
+
+  <div class="app-container"> 
+    <header> 
+      <div class="brand">UnseenCare</div> 
+      <div> 
+        <span class="user-badge" id="userEmailDisplay"></span> 
+        <button class="btn-logout" onclick="logout()">Uitloggen</button> 
+      </div> 
+    </header> 
+
+    <!-- TAB 1: VASTLEGGEN --> 
+    <div id="tab-vastleggen" class="tab-content"> 
+      <div class="card"> 
+        <h3 style="margin-bottom: 16px; color: var(--primary-teal);">Status Bijwerken</h3> 
+         
+        <div class="form-group"> 
+          <label>Dagdeel</label> 
+          <select id="timeSlot" onchange="handleTimeSlotChange()"> 
+            <option value="Ochtend">Ochtendmeting</option> 
+            <option value="Middag">Middagmeting</option> 
+            <option value="Avond">Avondmeting</option> 
+          </select> 
+        </div> 
+
+        <!-- PIJNSCORE -->
+        <div class="form-group"> 
+          <label>Pijnscore (0 - 10)</label> 
+          <div class="input-box-container">
+            <div class="pain-preview-box">
+              <span class="pain-emoji" id="painEmoji">🙂</span>
+              <span class="pain-value-text" id="painValueText">3 / 10</span>
+            </div>
+            <input type="range" id="nprs" min="0" max="10" value="3" oninput="updatePainEmoji(this.value)"> 
+          </div>
+        </div> 
+
+        <!-- ENERGIE -->
+        <div class="form-group"> 
+          <label>Energie</label> 
+          <div class="input-box-container">
+            <div class="battery-preview-box">
+              <div class="battery-visual-large">
+                <div class="battery-fill-large" id="batteryFillLarge" style="width: 60%;"></div>
+              </div>
+              <span class="battery-percentage-text" id="batteryPercentageText">60%</span>
+            </div>
+            <input type="range" id="energy" min="0" max="100" value="60" oninput="updateBatteryPreview(this.value)">
+          </div>
+        </div> 
+
+        <!-- STEMMING / STRESS -->
+        <div class="form-group"> 
+          <label>Stemming & Stress (0 = Geen stress, 10 = Ernstige stress)</label> 
+          <div class="input-box-container">
+            <div class="thermo-preview-box">
+              <div class="thermo-visual">
+                <div class="thermo-bulb" id="thermoBulb"></div>
+                <div class="thermo-tube">
+                  <div class="thermo-fill" id="thermoFill" style="width: 20%;"></div>
+                </div>
+              </div>
+              <span class="thermo-value-text" id="thermoValueText">2 / 10</span>
+            </div>
+            <input type="range" id="stress" min="0" max="10" value="2" oninput="updateStressPreview(this.value)">
+          </div>
+        </div> 
+
+        <!-- ISI SLAAPKWALTITEIT -->
+        <div class="isi-section visible" id="isiContainer">
+          <div class="isi-title">Slaapkwaliteit (ISI)</div>
+          <div class="isi-q"><label>1. Moeite met inslapen?</label><input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div class="isi-q"><label>2. Moeite met doorslapen?</label><input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div class="isi-q"><label>3. Te vroeg wakker?</label><input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div class="isi-q"><label>4. Tevreden over slaap?</label><input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div class="isi-q"><label>5. Problemen merkbaar voor anderen?</label><input type="range" class="isi-input" min="0" max="4" value="0" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div class="isi-q"><label>6. Zorgen over slaap?</label><input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div class="isi-q"><label>7. Belemmering overdag?</label><input type="range" class="isi-input" min="0" max="4" value="1" oninput="calculateISI()"><div class="isi-val-display">0 — 4</div></div>
+          <div style="margin-top:8px; font-weight:700; font-size:0.85rem; color:var(--primary-teal);" id="isiResultPreview">Score: 6/28</div>
+        </div> 
+
+        <!-- PSK KLINIMETRIE -->
+        <div class="form-group"> 
+          <label>Belastbaarheid — Patiënt Specifieke Klachten (PSK)</label> 
+          <div class="input-box-container">
+            <p style="font-size: 0.75rem; color: var(--text-sub); margin-bottom: 6px;">Noteer 2 belangrijke activiteiten en geef aan hoeveel moeite dit kost (0 = geen moeite, 10 = volledig onmogelijk).</p>
+            
+            <div class="psk-row">
+              <input type="text" id="pskActivity1" placeholder="Bijv. Boodschappen doen of wandelen">
+              <div class="psk-header-row">
+                <input type="range" id="pskScore1" min="0" max="10" value="3" oninput="updatePskDisplay(1, this.value)">
+                <span class="psk-score-display" id="pskText1">3 / 10</span>
+              </div>
+            </div>
+
+            <div class="psk-row">
+              <input type="text" id="pskActivity2" placeholder="Bijv. Huishouden of lang zitten">
+              <div class="psk-header-row">
+                <input type="range" id="pskScore2" min="0" max="10" value="3" oninput="updatePskDisplay(2, this.value)">
+                <span class="psk-score-display" id="pskText2">3 / 10</span>
+              </div>
+            </div>
+          </div>
+        </div> 
+
+        <div class="form-group"> 
+          <label>Notitie</label> 
+          <textarea id="notes" rows="2" placeholder="Optioneel..."></textarea> 
+        </div> 
+
+        <button class="btn-save" onclick="saveStatus()">Opslaan</button> 
+      </div> 
+    </div> 
+
+    <!-- TAB 2: OVERZICHT --> 
+    <div id="tab-overzicht" class="tab-content active"> 
+      <div style="text-align: center; margin-bottom: 16px;"> 
+        <h2>Overzicht</h2> 
+        <div style="font-size: 0.8rem; color: var(--text-sub);" id="lastUpdateDisplay">--</div> 
+      </div> 
+      <div id="dashboardContent"> 
+        <p style="text-align: center; color: var(--text-sub);">Laden...</p> 
+      </div> 
+    </div> 
+
+    <!-- TAB 3: DELEN --> 
+    <div id="tab-delen" class="tab-content"> 
+      <div class="card"> 
+        <h3 style="color: var(--primary-teal); margin-bottom: 8px;">Koppelen met Kijker</h3> 
+        <p style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 12px;">Voer het e-mailadres in van de persoon die mee mag kijken.</p>
+        <input type="email" id="viewerEmailToLink" placeholder="E-mailadres kijker" style="margin-bottom: 8px;">
+        <button class="btn-save" onclick="linkViewerByEmail()">Koppel Kijker</button>
+        <div id="shareStatusContainer" style="margin-top: 16px;"></div> 
+      </div> 
+    </div> 
+  </div> 
+
+  <nav class="bottom-nav"> 
+    <button class="nav-item" id="nav-vastleggen" onclick="switchTab('vastleggen')">Vastleggen</button> 
+    <button class="nav-item active" id="nav-overzicht" onclick="switchTab('overzicht')">Overzicht</button> 
+    <button class="nav-item" id="nav-delen" onclick="switchTab('delen')">Delen</button> 
+  </nav> 
+
+  <script> 
+    const SUPABASE_URL = "https://xvmmbvsfngvmsqbagqwm.supabase.co"; 
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bW1idnNmbmd2bXNxYmFncXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyODU0MzEsImV4cCI6MjEwMjg2MTQzMX0.Dw2xmdiugEnLfMlmMPIeJGv2nSGKamzbAsIDHkJEUUo"; 
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); 
+
+    let isSignUp = false; 
+    let currentUser = null; 
+    let currentIsiResultText = "Geen klinische insomnie (ISI 6/28)";
+    const painEmojis = ["😀", "🙂", "😐", "🙁", "😣", "😖", "😫", "😭", "😱", "🤯", "☠️"];
+
+    function updatePainEmoji(val) {
+      document.getElementById('painEmoji').innerText = painEmojis[val] || "😐";
+      document.getElementById('painValueText').innerText = `${val} / 10`;
+    }
+
+    function updateBatteryPreview(val) {
+      const fill = document.getElementById('batteryFillLarge');
+      const text = document.getElementById('batteryPercentageText');
+      fill.style.width = `${val}%`;
+      text.innerText = `${val}%`;
+
+      if (val < 20) {
+        fill.style.background = '#ef4444'; 
+      } else if (val < 40) {
+        fill.style.background = '#f59e0b'; 
+      } else {
+        fill.style.background = 'var(--primary-teal)'; 
+      }
+    }
+
+    function updateStressPreview(val) {
+      const fill = document.getElementById('thermoFill');
+      const bulb = document.getElementById('thermoBulb');
+      const text = document.getElementById('thermoValueText');
+      
+      const pct = Math.max((val / 10) * 100, 5);
+      fill.style.width = `${pct}%`;
+      text.innerText = `${val} / 10`;
+
+      let color = '#10b981'; // Groen (laag/geen stress)
+      if (val >= 7) {
+        color = '#ef4444'; // Rood (hoge stress)
+      } else if (val >= 4) {
+        color = '#f59e0b'; // Oranje (matige stress)
+      }
+
+      fill.style.background = color;
+      bulb.style.background = color;
+    }
+
+    function updatePskDisplay(rowNum, val) {
+      document.getElementById(`pskText${rowNum}`).innerText = `${val} / 10`;
+    }
+
+    function handleTimeSlotChange() {
+      const slot = document.getElementById('timeSlot').value;
+      const isiContainer = document.getElementById('isiContainer');
+      if (slot === 'Ochtend') isiContainer.classList.add('visible');
+      else isiContainer.classList.remove('visible');
+    }
+
+    function calculateISI() {
+      const inputs = document.querySelectorAll('.isi-input');
+      let total = 0;
+      inputs.forEach(input => { total += parseInt(input.value) || 0; });
+      let category = total <= 7 ? "Geen insomnie" : total <= 14 ? "Lichte insomnie" : total <= 21 ? "Matige insomnie" : "Ernstige insomnie";
+      currentIsiResultText = `${category} (ISI ${total}/28)`;
+      document.getElementById('isiResultPreview').innerText = `Score: ${total}/28 (${category})`;
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => { 
+      calculateISI(); 
+      updateBatteryPreview(60); 
+      updatePainEmoji(3);
+      updateStressPreview(2);
+      updatePskDisplay(1, 3);
+      updatePskDisplay(2, 3);
+
+      const { data: { session } } = await db.auth.getSession(); 
+      if (session && session.user) { 
+        currentUser = session.user; 
+        document.getElementById('userEmailDisplay').innerText = currentUser.email; 
+
+        const savedRole = localStorage.getItem('unseencare_role_' + currentUser.id);
+        if (savedRole) {
+          document.getElementById('authOverlay').classList.add('hidden');
+          applyRoleUI(savedRole);
+          loadDashboard();
+          if (savedRole === 'patient') loadSharingInfo();
+        } else {
+          document.getElementById('initialAuthCard').classList.add('hidden');
+          document.getElementById('roleSelectionCard').classList.remove('hidden');
+        }
+      } 
+    }); 
+
+    function toggleAuthMode() { 
+      isSignUp = !isSignUp; 
+      document.getElementById('authBtn').innerText = isSignUp ? "Registreren" : "Inloggen"; 
+      document.getElementById('authToggleText').innerText = isSignUp ? "Al account? Inloggen" : "Geen account? Registreer"; 
+      document.getElementById('authForgotText').style.display = isSignUp ? "none" : "block";
+    } 
+
+    async function handleAuth() { 
+      const email = document.getElementById('authEmail').value.trim(); 
+      const password = document.getElementById('authPassword').value; 
+      if (!email || !password) return alert("Vul e-mail en wachtwoord in."); 
+
+      let res = isSignUp ? await db.auth.signUp({ email, password }) : await db.auth.signInWithPassword({ email, password }); 
+      if (res.error) {
+        alert("Fout: " + res.error.message); 
+      } else if (res.data.user) { 
+        currentUser = res.data.user; 
+        document.getElementById('userEmailDisplay').innerText = currentUser.email; 
+        
+        const existingRole = localStorage.getItem('unseencare_role_' + currentUser.id);
+        if (existingRole) {
+          document.getElementById('authOverlay').classList.add('hidden');
+          applyRoleUI(existingRole);
+          loadDashboard();
+          if (existingRole === 'patient') loadSharingInfo();
+        } else {
+          document.getElementById('initialAuthCard').classList.add('hidden');
+          document.getElementById('roleSelectionCard').classList.remove('hidden');
+        }
+      } 
+    } 
+
+    async function resetPassword() {
+      const email = document.getElementById('authEmail').value.trim();
+      if (!email) {
+        alert("Vul eerst je e-mailadres in om je wachtwoord te resetten.");
+        return;
+      }
+      const { error } = await db.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        alert("Fout bij versturen e-mail: " + error.message);
+      } else {
+        alert("Er is een e-mail verzonden naar " + email + " met instructies om je wachtwoord te resetten.");
+      }
+    }
+
+    function setRole(role) {
+      if (!currentUser) return;
+      localStorage.setItem('unseencare_role_' + currentUser.id, role);
+      document.getElementById('authOverlay').classList.add('hidden');
+      applyRoleUI(role);
+      loadDashboard();
+      if (role === 'patient') loadSharingInfo();
+    }
+
+    function applyRoleUI(role) {
+      if (role === 'viewer') {
+        document.getElementById('nav-vastleggen').style.display = 'none';
+        document.getElementById('nav-delen').style.display = 'none';
+        switchTab('overzicht');
+      } else {
+        document.getElementById('nav-vastleggen').style.display = 'block';
+        document.getElementById('nav-delen').style.display = 'block';
+      }
+    }
+
+    async function logout() { 
+      await db.auth.signOut(); 
+      location.reload(); 
+    } 
+
+    async function loadDashboard() { 
+      if (!currentUser) return;
+      const role = localStorage.getItem('unseencare_role_' + currentUser.id);
+      let targetUserId = currentUser.id;
+
+      if (role === 'viewer') {
+        const { data: conn } = await db.from('connections').select('patient_id').eq('viewer_email', currentUser.email).limit(1);
+        if (conn && conn.length > 0) {
+          targetUserId = conn[0].patient_id;
+        } else {
+          targetUserId = null;
+        }
+      }
+
+      const container = document.getElementById('dashboardContent'); 
+      if (!targetUserId) {
+        container.innerHTML = `<div class="card" style="text-align:center;"><p style="color:var(--text-sub);">Geen actieve koppeling gevonden met een cliënt.</p></div>`;
+        return;
+      }
+
+      const { data } = await db.from('statuses').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(1); 
+      if (!data || data.length === 0) { 
+        container.innerHTML = `<div class="card" style="text-align:center;"><p style="color:var(--text-sub);">Nog geen metingen ingevoerd.</p></div>`; 
+        return; 
+      } 
+
+      const latest = data[0]; 
+      const energyVal = latest.energy !== undefined && latest.energy !== null ? latest.energy : 60; 
+      const stressVal = latest.stress !== undefined && latest.stress !== null ? latest.stress : '--';
+      
+      document.getElementById('lastUpdateDisplay').innerText = new Date(latest.created_at).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }); 
+      
+      container.innerHTML = ` 
+        <div class="status-grid"> 
+          <div class="metric-card"> 
+            <div style="font-size: 2rem;">${painEmojis[latest.nprs] || '🩹'}</div> 
+            <div class="metric-title">Pijn (NPRS)</div> 
+            <div class="metric-value">${latest.nprs} / 10</div> 
+          </div> 
+          <div class="metric-card"> 
+            <div class="battery-wrapper"><div class="battery-fill" style="width: ${energyVal}%;"></div></div> 
+            <div class="metric-title">Energie</div> 
+            <div class="metric-value">${energyVal}%</div> 
+          </div> 
+        </div> 
+
+        <div class="full-card">
+          <div class="metric-title">Stress & Belasting</div>
+          <div style="font-weight: 700; color:var(--primary-teal); font-size:1.1rem; margin-top:2px;">🌡️ ${stressVal} / 10</div>
+        </div>
+
+        ${latest.sleep_quality ? `<div class="full-card"><div class="metric-title">Slaap</div><div style="font-weight: 700; color:var(--primary-teal);">${latest.sleep_quality}</div></div>` : ''} 
+        
+        <div class="full-card">
+          <div class="metric-title" style="margin-bottom:8px;">Belastbaarheid (PSK)</div>
+          <div style="font-size: 0.9rem; line-height: 1.4;">${latest.psk_status || 'Geen PSK ingevoerd'}</div>
+        </div> 
+        
+        ${latest.notes ? `<div class="full-card"><div class="metric-title">Notitie</div><div class="notes-box">"${latest.notes}"</div></div>` : ''} 
+      `; 
+    } 
+
+    async function saveStatus() { 
+      if (!currentUser) return;
+      const timeSlot = document.getElementById('timeSlot').value;
+      
+      const act1 = document.getElementById('pskActivity1').value.trim() || 'Activiteit 1';
+      const score1 = document.getElementById('pskScore1').value;
+      const act2 = document.getElementById('pskActivity2').value.trim() || 'Activiteit 2';
+      const score2 = document.getElementById('pskScore2').value;
+      const pskSummary = `• ${act1}: ${score1}/10<br>• ${act2}: ${score2}/10`;
+
+      const { error } = await db.from('statuses').insert([{ 
+        user_id: currentUser.id, 
+        nprs: parseInt(document.getElementById('nprs').value), 
+        energy: parseInt(document.getElementById('energy').value), 
+        stress: parseInt(document.getElementById('stress').value),
+        sleep_quality: timeSlot === 'Ochtend' ? currentIsiResultText : null, 
+        psk_status: pskSummary, 
+        notes: `[${timeSlot}] ${document.getElementById('notes').value}` 
+      }]); 
+      if (error) alert("Fout: " + error.message); 
+      else { switchTab('overzicht'); loadDashboard(); } 
+    } 
+
+    async function linkViewerByEmail() {
+      if (!currentUser) return;
+      const viewerEmail = document.getElementById('viewerEmailToLink').value.trim();
+      if (!viewerEmail) return alert("Vul een geldig e-mailadres in.");
+
+      const { error } = await db.from('connections').upsert([
+        { patient_id: currentUser.id, viewer_email: viewerEmail }
+      ], { onConflict: 'patient_id' });
+
+      if (error) {
+        alert("Fout bij koppelen: " + error.message);
+      } else {
+        alert("Kijker succesvol gekoppeld!");
+        loadSharingInfo();
+      }
+    }
+
+    async function loadSharingInfo() { 
+      if (!currentUser) return;
+      const { data } = await db.from('connections').select('*').eq('patient_id', currentUser.id); 
+      const container = document.getElementById('shareStatusContainer'); 
+      if (!container) return;
+      
+      if (data && data.length > 0 && data[0].viewer_email) { 
+        container.innerHTML = `<div style="text-align: center; background: #f8fafc; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color);"><p style="font-size:0.8rem; color:var(--text-sub);">Huidige kijker:</p><strong>${data[0].viewer_email}</strong><button onclick="removeViewer('${data[0].id}')" style="margin-top:10px; background:#ef4444; color:white; border:none; padding:8px; border-radius:8px; width:100%; cursor:pointer; font-size:0.85rem;">Ontkoppelen</button></div>`; 
+      } else {
+        container.innerHTML = "";
+      }
+    } 
+
+    async function removeViewer(id) { 
+      await db.from('connections').delete().eq('id', id); 
+      document.getElementById('viewerEmailToLink').value = "";
+      loadSharingInfo(); 
+    } 
+
+    function switchTab(tab) { 
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active')); 
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active')); 
+      document.getElementById(`tab-${tab}`).classList.add('active'); 
+      document.getElementById(`nav-${tab}`).classList.add('active'); 
+    } 
+  </script> 
+</body> 
+</html>
